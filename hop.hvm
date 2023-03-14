@@ -1,0 +1,86 @@
+// HOP ( High Order Plus ) - A simple HVM pre-processor
+// 
+// Right now it just resolves import statements.
+
+// Debug helper
+(Dbg x) = (HVM.log x x)
+(Print x) = (HVM.print x x)
+
+// If statement
+(If 1 a b) = a
+(If 0 a b) = b
+
+// Boolean
+(Not 1) = 0
+(Not 0) = 1
+(And 1 1) = 1
+(And a b) = 0
+
+// Option
+(Option.map (Option.some x) map) = (Option.some (map x))
+(Option.map (Option.none) map) = (Option.none)
+(Option.unwrap_or (Option.some x) default) = x
+(Option.unwrap_or Option.none default) = default
+(Option.or (Option.some s) x) = s
+(Option.or Option.none x) = x
+
+// Strings
+(String.concat String.nil s) = s
+(String.concat (String.cons s1 n1) s2) = (String.cons s1 (String.concat n1 s2))
+(String.append String.nil s) = (String.cons s String.nil)
+(String.append (String.cons xs xn) i) = (String.cons xs (String.append xn i))
+(String.starts_with_char String.nil c) = 0
+(String.starts_with_char (String.cons x n) c) = (== x c)
+(String.starts_with String.nil String.nil) = 1
+(String.starts_with (String.cons x n) String.nil) = 1
+(String.starts_with String.nil (String.cons x n)) = 0
+(String.starts_with (String.cons x1 n1) (String.cons x2 n2)) = (And (== x1 x2) (String.starts_with n1 n2))
+(String.strip_prefix String.nil p) = Option.none
+(String.strip_prefix s String.nil) = (Option.some s)
+(String.strip_prefix (String.cons x1 n1) (String.cons x2 n2)) = (If (== x1 x2) (String.strip_prefix n1 n2) Option.none)
+(String.eq String.nil String.nil) = 1
+(String.eq (String.cons x n) String.nil) = 0
+(String.eq String.nil (String.cons x n)) = 0
+(String.eq (String.cons x1 n1) (String.cons x2 n2)) = (And (== x1 x2) (String.eq n1 n2))
+(String.lines (String.nil)) = (List.nil)
+(String.lines s) = (String.lines_ List.nil String.nil s)
+(String.lines_ l s String.nil) = (List.append l s)
+(String.lines_ l s (String.cons 10 xn)) = (String.lines_ (List.append l s) String.nil xn) // NOTE: 10 is the newline
+(String.lines_ l s (String.cons xs xn)) = (String.lines_ l (String.append s xs) xn)
+
+// Lists
+(List.append List.nil i) = (List.cons i List.nil)
+(List.append (List.cons x n) i) = (List.cons x (List.append n i))
+(List.join List.nil c) = String.nil
+(List.join (List.cons xs xn) c) = (String.concat (String.append xs c) (List.join xn c))
+(List.filter List.nil pred) = List.nil
+(List.filter (List.cons x n) pred) = (If (pred x) (List.cons x (List.filter n pred)) (List.filter n pred))
+(List.map List.nil map) = List.nil
+(List.map (List.cons x n) map) = (List.cons (map x) (List.map n map))
+
+// Main function
+(Main infile outfile) = (
+    (HVM.load infile
+        @input (HVM.store outfile (Compile input) Done))
+)
+
+// Preprocessor
+(Compile input) = 
+    // Get the String.lines from the input
+    let lines = (String.lines input)
+
+    // Preprocess lines
+    let lines = (List.map lines @line (If (String.starts_with_char line '#') (HashLine line) line))
+
+    // Remove blank lines
+    let lines = (List.filter lines @line (Not (String.eq line "")))
+
+    (List.join lines 10)
+
+
+(HashLine line) = 
+    let include = (Option.map (String.strip_prefix line "#include ") @x (IncludeFile x))
+
+    (Option.unwrap_or include "")
+
+(IncludeFile name) = (HVM.load name @file (Compile file))
